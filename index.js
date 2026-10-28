@@ -104,7 +104,7 @@ app.get('/api/v1/chithrapata/search', async (req, res) => {
     }
 });
 
-// 3. Info & Download Endpoint
+// 3. Info & Download Endpoint (Clean Filtered Links)
 app.get('/api/v1/chithrapata/infodl', async (req, res) => {
     res.setTimeout(60000, () => {
         if (!res.headersSent) {
@@ -157,14 +157,13 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
 
         const downloads = [];
         
-        $('a, [data-link], [href]').each((i, el) => {
-            const href = $(el).attr('href') || $(el).attr('data-link') || '';
+        $('a').each((i, el) => {
+            const href = $(el).attr('href') || '';
             const text = $(el).text().trim();
-            const parentBlock = $(el).closest('tr, div, section').text();
+            const parentBlock = $(el).closest('tr, div, section, li').text();
 
-            if (href && (href.includes('pixeldrain.com') || href.includes('t.me/') || href.includes('streamx.link') || href.includes('dl.') || href.includes('drive.') || href.includes('chithrapata.com/'))) {
-                if (href === movieUrl || href === 'https://chithrapata.com/') return;
-
+            if (href && (href.includes('/links/') || href.includes('pixeldrain.com') || href.includes('t.me/') || href.includes('streamx.link'))) {
+                
                 let qName = "HD";
                 if (text.match(/480p/i) || parentBlock.match(/480p/i)) qName = "480p";
                 else if (text.match(/720p/i) || parentBlock.match(/720p/i)) qName = "720p";
@@ -174,7 +173,7 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
                 let typeLabel = "Direct DL";
                 if (href.includes('pixeldrain')) typeLabel = "PixelDrain";
                 else if (href.includes('t.me/')) typeLabel = "Telegram Bot";
-                else if (href.includes('streamx.link')) typeLabel = "Direct High-Speed Server";
+                else if (href.includes('streamx.link') || href.includes('/links/')) typeLabel = "High-Speed Server";
 
                 let size = "N/A";
                 const sizeMatch = parentBlock.match(/(\d+(\.\d+)?\s*(MB|GB))/i);
@@ -191,7 +190,7 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
             }
         });
 
-        console.log(`🎉 Successfully extracted ${downloads.length} download links!`);
+        console.log(`🎉 Successfully extracted ${downloads.length} clean download links!`);
         console.log(`==============================================\n`);
 
         if (!res.headersSent) {
