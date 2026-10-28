@@ -1,6 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const cheerio = require('cheerio');
+const puppeteer = require('puppeteer');
 const cors = require('cors');
 
 const app = express();
@@ -18,7 +19,7 @@ const HEADERS = {
 app.get('/', (req, res) => {
     res.json({
         status: true,
-        message: "IMALSHA CHITHRAPATA FAST API is Live 🚀",
+        message: "IMALSHA CHITHRAPATA PUPPETEER API is Live 🚀",
         endpoints: {
             latest: "/api/v1/chithrapata/latest?page=1",
             search: "/api/v1/chithrapata/search?q=movie_name",
@@ -104,7 +105,7 @@ app.get('/api/v1/chithrapata/search', async (req, res) => {
     }
 });
 
-// 3. Info & Download Endpoint
+// 3. Info & Download Endpoint (Puppeteer to click PixelDrain & Direct DL tabs)
 app.get('/api/v1/chithrapata/infodl', async (req, res) => {
     res.setTimeout(60000, () => {
         if (!res.headersSent) {
@@ -116,11 +117,44 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
     if (!movieUrl) return res.status(400).json({ status: false, message: "URL required" });
 
     console.log(`\n==============================================`);
-    console.log(`🔥 [CHITHRAPATA API] Processing: ${movieUrl}`);
+    console.log(`🔥 [CHITHRAPATA PUPPETEER API] Processing: ${movieUrl}`);
 
+    let browser = null;
     try {
-        const movieRes = await axios.get(movieUrl, { headers: HEADERS, timeout: 45000 });
-        const $ = cheerio.load(movieRes.data);
+        browser = await puppeteer.launch({
+            headless: true,
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--disable-gpu',
+                '--no-zygote',
+                '--single-process'
+            ]
+        });
+        const page = await browser.newPage();
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
+
+        await page.goto(movieUrl, { waitUntil: 'networkidle2', timeout: 45000 });
+
+        // 🖱️ Click PixelDrain and Direct DL tabs so their links render in the DOM
+        await page.evaluate(async () => {
+            const buttons = Array.from(document.querySelectorAll('button, a, div, span'));
+            for (const btn of buttons) {
+                const txt = (btn.innerText || '').trim().toLowerCase();
+                if (txt === 'pixeldrain' || txt === 'direct dl') {
+                    btn.click();
+                    await new Promise(r => setTimeout(r, 1000));
+                }
+            }
+        });
+
+        // Wait for tabs content to load
+        await new Promise(r => setTimeout(r, 2000));
+
+        const htmlContent = await page.content();
+        const $ = cheerio.load(htmlContent);
 
         const title = $('meta[property="og:title"]').attr('content') || $('h1').text().trim() || 'Unknown';
         const image = $('meta[property="og:image"]').attr('content') || '';
@@ -160,11 +194,9 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
         $('a').each((i, el) => {
             const href = $(el).attr('href') || '';
             const text = $(el).text().trim();
-            const parentBlock = $(el).closest('tr, div, section').text();
+            const parentBlock = $(el).closest('tr, .download-row, .links-box, div').text();
 
             if (href && (href.includes('pixeldrain.com') || href.includes('t.me/') || href.includes('streamx.link') || href.includes('dl.') || href.includes('drive.'))) {
-                if (href === movieUrl) return;
-
                 let qName = "HD";
                 if (text.match(/480p/i) || parentBlock.match(/480p/i)) qName = "480p";
                 else if (text.match(/720p/i) || parentBlock.match(/720p/i)) qName = "720p";
@@ -191,7 +223,9 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
             }
         });
 
-        console.log(`🎉 Successfully extracted ${downloads.length} download links!`);
+        if (browser) await browser.close();
+
+        console.log(`🎉 Successfully extracted ${downloads.length} download links via Puppeteer!`);
         console.log(`==============================================\n`);
 
         if (!res.headersSent) {
@@ -221,6 +255,7 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
         }
 
     } catch (err) {
+        if (browser) await browser.close();
         console.error(`❌ [API ERROR]: ${err.message}`);
         if (!res.headersSent) {
             res.status(500).json({ status: false, error: err.message });
