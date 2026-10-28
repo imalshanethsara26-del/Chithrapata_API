@@ -105,7 +105,7 @@ app.get('/api/v1/chithrapata/search', async (req, res) => {
     }
 });
 
-// 3. Info & Download Endpoint (Puppeteer to click PixelDrain & Direct DL tabs)
+// 3. Info & Download Endpoint
 app.get('/api/v1/chithrapata/infodl', async (req, res) => {
     res.setTimeout(60000, () => {
         if (!res.headersSent) {
@@ -138,7 +138,7 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
 
         await page.goto(movieUrl, { waitUntil: 'networkidle2', timeout: 45000 });
 
-        // 🖱️ Click PixelDrain and Direct DL tabs so their links render in the DOM
+        // Click PixelDrain and Direct DL tabs
         await page.evaluate(async () => {
             const buttons = Array.from(document.querySelectorAll('button, a, div, span'));
             for (const btn of buttons) {
@@ -150,7 +150,6 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
             }
         });
 
-        // Wait for tabs content to load
         await new Promise(r => setTimeout(r, 2000));
 
         const htmlContent = await page.content();
