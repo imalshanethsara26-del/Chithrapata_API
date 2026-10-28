@@ -104,7 +104,7 @@ app.get('/api/v1/chithrapata/search', async (req, res) => {
     }
 });
 
-// 3. Info & Download Endpoint (Clean Filtered Links)
+// 3. Info & Download Endpoint (Precise Quality & Type Mapping)
 app.get('/api/v1/chithrapata/infodl', async (req, res) => {
     res.setTimeout(60000, () => {
         if (!res.headersSent) {
@@ -160,28 +160,35 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
         $('a').each((i, el) => {
             const href = $(el).attr('href') || '';
             const text = $(el).text().trim();
-            const parentBlock = $(el).closest('tr, div, section, li').text();
+            const parentBlock = $(el).closest('tr, div, section, li, ul');
+            const parentText = parentBlock.text();
 
             if (href && (href.includes('/links/') || href.includes('pixeldrain.com') || href.includes('t.me/') || href.includes('streamx.link'))) {
                 
-                let qName = "HD";
-                if (text.match(/480p/i) || parentBlock.match(/480p/i)) qName = "480p";
-                else if (text.match(/720p/i) || parentBlock.match(/720p/i)) qName = "720p";
-                else if (text.match(/1080p|FHD/i) || parentBlock.match(/1080p|FHD/i)) qName = "1080p";
-                else if (text.match(/2160p|4k/i) || parentBlock.match(/2160p|4k/i)) qName = "2160p";
+                let qName = "HD 720p";
+                if (text.match(/1080p|FHD/i) || parentText.match(/1080p|FHD/i)) qName = "FHD 1080p";
+                else if (text.match(/720p|HD/i) || parentText.match(/720p|HD/i)) qName = "HD 720p";
+                else if (text.match(/480p/i) || parentText.match(/480p/i)) qName = "480p";
+                else if (text.match(/2160p|4k/i) || parentText.match(/2160p|4k/i)) qName = "4K 2160p";
 
                 let typeLabel = "Direct DL";
-                if (href.includes('pixeldrain')) typeLabel = "PixelDrain";
-                else if (href.includes('t.me/')) typeLabel = "Telegram Bot";
-                else if (href.includes('streamx.link') || href.includes('/links/')) typeLabel = "High-Speed Server";
+                if (href.includes('pixeldrain') || parentText.toLowerCase().includes('pixeldrain')) {
+                    typeLabel = "PixelDrain";
+                } else if (href.includes('t.me/')) {
+                    typeLabel = "Telegram Bot";
+                } else {
+                    typeLabel = "Direct DL";
+                }
 
                 let size = "N/A";
-                const sizeMatch = parentBlock.match(/(\d+(\.\d+)?\s*(MB|GB))/i);
+                const sizeMatch = parentText.match(/(\d+(\.\d+)?\s*(MB|GB))/i);
                 if (sizeMatch) size = sizeMatch[0];
+
+                const formattedQuality = `WEB-DL ${qName} [${typeLabel}]`;
 
                 if (!downloads.some(d => d.link === href)) {
                     downloads.push({
-                        quality: `WEB-DL ${qName} [${typeLabel}]`,
+                        quality: formattedQuality,
                         size,
                         language: "English / Sinhala Sub",
                         link: href
@@ -190,7 +197,7 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
             }
         });
 
-        console.log(`🎉 Successfully extracted ${downloads.length} clean download links!`);
+        console.log(`🎉 Successfully extracted ${downloads.length} formatted download links!`);
         console.log(`==============================================\n`);
 
         if (!res.headersSent) {
@@ -220,7 +227,7 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
         }
 
     } catch (err) {
-        console.error(`❌ [API ERROR]: ${err.message}`);
+        console.error(`❌ [API ERROR]: `${err.message}`);
         if (!res.headersSent) {
             res.status(500).json({ status: false, error: err.message });
         }
