@@ -9,6 +9,7 @@ const PORT = process.env.PORT || 8080;
 app.use(cors());
 
 const BASE_URL = 'https://chithrapata.com';
+const MOVIES_URL = 'https://chithrapata.com/movies';
 const HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
     'Referer': 'https://chithrapata.com/'
@@ -27,13 +28,13 @@ app.get('/', (req, res) => {
     });
 });
 
-// 1. Latest Movies Endpoint
+// 1. Latest / Movies Endpoint (Updated with /movies/ and Pagination support)
 app.get('/api/v1/chithrapata/latest', async (req, res) => {
     try {
         const pageNum = req.query.page || 1;
-        const latestUrl = pageNum == 1 ? `${BASE_URL}/` : `${BASE_URL}/page/${pageNum}/`;
+        const targetUrl = pageNum == 1 ? `${MOVIES_URL}/` : `${MOVIES_URL}/page/${pageNum}/`;
         
-        const response = await axios.get(latestUrl, { headers: HEADERS, timeout: 30000 });
+        const response = await axios.get(targetUrl, { headers: HEADERS, timeout: 30000 });
         const $ = cheerio.load(response.data);
         const results = [];
 
@@ -65,7 +66,7 @@ app.get('/api/v1/chithrapata/latest', async (req, res) => {
     }
 });
 
-// 2. Search Endpoint
+// 2. Search Endpoint (Your original stable logic)
 app.get('/api/v1/chithrapata/search', async (req, res) => {
     try {
         const query = req.query.q;
@@ -128,7 +129,7 @@ async function resolveFinalLink(linkUrl) {
     }
 }
 
-// 3. Info & Download Endpoint (Clean Metadata Extraction)
+// 3. Info & Download Endpoint (Your original stable logic)
 app.get('/api/v1/chithrapata/infodl', async (req, res) => {
     req.setTimeout(60000);
     res.setTimeout(60000, () => {
@@ -151,7 +152,6 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
         const image = $('meta[property="og:image"]').attr('content') || '';
         const quality = $('.quality').first().text().trim() || 'WEB-DL';
         
-        // 🎯 Accurate IMDb Rating Extraction
         let rating = 'N/A';
         const fullText = $.text();
         const imdbMatch = fullText.match(/IMDb[:\s]*([0-9.]+)/i);
@@ -159,14 +159,12 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
             rating = imdbMatch[1];
         }
 
-        // 🎯 Clean Director Extraction (Stopping at 'Stars' or next keyword)
         let director = 'N/A';
         const dirMatch = fullText.match(/Director[:\s]*([^\n\r]+?)(?=Stars|Country|Year|Share|$)/i);
         if (dirMatch && dirMatch[1]) {
             director = dirMatch[1].trim();
         }
 
-        // 🎯 Clean Country Extraction (Stopping at 'Year' or next keyword)
         let country = 'N/A';
         const countryMatch = fullText.match(/Country[:\s]*([^\n\r]+?)(?=Year|Share|Links|$)/i);
         if (countryMatch && countryMatch[1]) {
@@ -190,7 +188,6 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
             genres.push("Crime", "Drama", "Thriller", "Sinhala Subtitles");
         }
 
-        // 🎯 Clean Cast / Stars Extraction
         const cast = [];
         const starsMatch = fullText.match(/Stars[:\s]*([^\n\r]+?)(?=Country|Year|Share|Links|$)/i);
         if (starsMatch && starsMatch[1]) {
@@ -203,7 +200,6 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
             });
         }
 
-        // Fallback visual cast scraper if text match fails
         if (cast.length === 0) {
             $('.cast-item, .person, .actor, .carousel-item').each((i, el) => {
                 const name = $(el).find('.name, h4, span').text().trim();
