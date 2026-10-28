@@ -28,7 +28,7 @@ app.get('/', (req, res) => {
     });
 });
 
-// 1. Movies / Latest Endpoint (Pagination supported via /movies/page/X/)
+// 1. Movies / Latest Endpoint
 app.get('/api/v1/chithrapata/latest', async (req, res) => {
     try {
         const pageNum = req.query.page || 1;
@@ -87,7 +87,7 @@ app.get('/api/v1/chithrapata/latest', async (req, res) => {
     }
 });
 
-// 2. Search Endpoint
+// 2. Search Endpoint (Fixed for WordPress Search query structure)
 app.get('/api/v1/chithrapata/search', async (req, res) => {
     try {
         const query = req.query.q;
@@ -98,18 +98,22 @@ app.get('/api/v1/chithrapata/search', async (req, res) => {
         const $ = cheerio.load(response.data);
         const results = [];
 
-        $('article, .item, .post, .result-item').each((i, el) => {
+        // Search results scraping targeting article and item blocks
+        $('article, .item, .post, .result-item, .box').each((i, el) => {
             const aTag = $(el).find('a').first();
             const href = aTag.attr('href') || '';
-            let title = $(el).find('h2, h3, .title').text().trim() || aTag.attr('title') || '';
+            let title = $(el).find('h2, h3, .title, .entry-title').text().trim() || aTag.attr('title') || '';
             let img = $(el).find('img').attr('src') || $(el).find('img').attr('data-src') || '';
             if (img.startsWith('//')) img = 'https:' + img;
+            if (!img) img = $(el).find('img').attr('data-lazy-src') || '';
+
             let quality = $(el).find('.quality, .badge').text().trim() || 'WEB-DL';
-            let rating = $(el).find('.rating').text().trim() || 'N/A';
+            let rating = $(el).find('.rating, .imdb').text().trim() || 'N/A';
 
             if (href && title && img) {
+                title = title.replace(/\t|\n/g, ' ').trim();
                 if (!results.some(r => r.link === href)) {
-                    results.push({ title: title.replace(/\t|\n/g, ' ').trim(), image: img, quality, rating, link: href });
+                    results.push({ title, image: img, quality, rating, link: href });
                 }
             }
         });
@@ -144,7 +148,7 @@ async function resolveFinalLink(linkUrl) {
     }
 }
 
-// 3. Info & Download Endpoint (With Improved Size Extraction)
+// 3. Info & Download Endpoint (Fixed Genres & Size Extraction)
 app.get('/api/v1/chithrapata/infodl', async (req, res) => {
     req.setTimeout(60000);
     res.setTimeout(60000, () => {
@@ -185,11 +189,21 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
             }
         });
 
+        // 🎯 Accurate Genres Extraction from specific tags/categories
         const genres = [];
-        $('.genres a, .sgeneros a, .cat-links a').each((i, el) => {
-            genres.push($(el).text().trim());
+        $('.sgeneros a, .genres a, .cat-links a, .tagcloud a, span.genres a').each((i, el) => {
+            const gText = $(el).text().trim();
+            if (gText && !genres.includes(gText)) {
+                genres.push(gText);
+            }
         });
-        if (genres.length === 0) genres.push("Crime", "Drama", "Thriller", "Sinhala Subtitles");
+        if (genres.length === 0) {
+            // Fallback if specific classes aren't matched
+            $('.sgeneros, .genres').find('a').each((i, el) => {
+                genres.push($(el).text().trim());
+            });
+        }
+        if (genres.length === 0) genres.push("Drama", "Thriller");
 
         const cast = [];
         const starsMatch = fullText.match(/Stars[:\s]*([^\n\r]+?)(?=Country|Year|Share|Links|$)/i);
@@ -201,23 +215,26 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
             });
         }
 
+        // 🎯 Accurate Size & Download Links Extraction
         const rawDownloads = [];
         $('a').each((i, el) => {
             const href = $(el).attr('href') || '';
             const text = $(el).text().trim();
-            const parentText = $(el).closest('div, section, tr, p, li').text();
-            const grandParentText = $(el).closest('div.download-box, .box, .wp-block-button').text();
+            const parentElement = $(el).closest('tr, li, p, div, span');
+            const parentText = parentElement.text();
+            const rowHtml = parentElement.html() || '';
 
-            if (href && (href.includes('/links/') || href.includes('pixeldrain.com') || href.includes('t.me/') || href.includes('streamx.link'))) {
+            if (href && (href.includes('/links/') || href.includes('pixeldrain.com') || href.includes('t.me/') || href.includes('streamx.link') || href.includes('dl.'))) {
                 let qName = "HD 720p";
-                if (text.match(/1080p|FHD/i) || parentText.match(/1080p|FHD/i)) qName = "FHD 1080p";
-                else if (text.match(/720p|HD/i) || parentText.match(/720p|HD/i)) qName = "HD 720p";
-                else if (text.match(/480p/i)) qName = "480p";
-                else if (text.match(/2160p|4k/i)) qName = "4K 2160p";
+                if (text.match(/1080p|FHD|1080P/i) || parentText.match(/1080p|FHD|1080P/i)) qName = "FHD 1080p";
+                else if (text.match(/720p|HD|720P/i) || parentText.match(/720p|HD|720P/i)) qName = "HD 720p";
+                else if (text.match(/480p|480P/i)) qName = "480p";
+                else if (text.match(/2160p|4k|4K/i)) qName = "4K 2160p";
 
                 let size = "N/A";
-                const combinedText = `${text} ${parentText} ${grandParentText}`;
-                const sizeMatch = combinedText.match(/(\d+(\.\d+)?\s*(MB|GB|mb|gb))/i);
+                // Search for size patterns like 750MB, 1.2 GB, 800 MB inside parent row or surrounding text
+                const searchContainerText = `${text} ${parentText} ${rowHtml}`;
+                const sizeMatch = searchContainerText.match(/(\d+(\.\d+)?\s*(MB|GB|mb|gb))/i);
                 if (sizeMatch && sizeMatch[0]) {
                     size = sizeMatch[0].trim();
                 }
@@ -256,7 +273,7 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
                 imdb: rating !== 'N/A' ? `${rating} (IMDb)` : 'N/A',
                 director,
                 country,
-                language: "",
+                language: "ENGLISH",
                 genres,
                 story: story || 'No description available',
                 cast,
