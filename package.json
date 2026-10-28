@@ -1,18 +1,16 @@
 {
   "name": "chithrapata-node-api",
   "version": "1.0.0",
-  "description": "Chithrapata API with Sparticuz Chromium by Imalsha",
+  "description": "Lightning Fast Chithrapata API by Imalsha",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "@sparticuz/chromium": "^123.0.1",
     "axios": "^1.6.8",
     "cheerio": "^1.0.0-rc.12",
     "cors": "^2.8.5",
-    "express": "^4.19.2",
-    "puppeteer-core": "^22.15.0"
+    "express": "^4.19.2"
   },
   "engines": {
     "node": ">=18.0.0"
