@@ -27,7 +27,7 @@ app.get('/', (req, res) => {
     });
 });
 
-// 1. Latest Movies Endpoint (Universal Selector)
+// 1. Latest Movies Endpoint
 app.get('/api/v1/chithrapata/latest', async (req, res) => {
     try {
         const pageNum = req.query.page || 1;
@@ -37,7 +37,6 @@ app.get('/api/v1/chithrapata/latest', async (req, res) => {
         const $ = cheerio.load(response.data);
         const results = [];
 
-        // Universal scraping for movie cards
         $('a').each((i, el) => {
             const href = $(el).attr('href') || '';
             const parent = $(el).closest('article, .item, .post, div');
@@ -66,7 +65,7 @@ app.get('/api/v1/chithrapata/latest', async (req, res) => {
     }
 });
 
-// 2. Search Endpoint (Universal Selector)
+// 2. Search Endpoint
 app.get('/api/v1/chithrapata/search', async (req, res) => {
     try {
         const query = req.query.q;
@@ -105,7 +104,7 @@ app.get('/api/v1/chithrapata/search', async (req, res) => {
     }
 });
 
-// 3. Info & Download Endpoint
+// 3. Info & Download Endpoint (Enhanced Download Link Extractor)
 app.get('/api/v1/chithrapata/infodl', async (req, res) => {
     res.setTimeout(60000, () => {
         if (!res.headersSent) {
@@ -156,15 +155,16 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
             if (src) gallery.push(src);
         });
 
-        // Extracting all download links (Telegram, PixelDrain, Direct DL)
+        // 🚀 Robust Download Links Scraper for Chithrapata
         const downloads = [];
         
         $('a').each((i, el) => {
             const href = $(el).attr('href') || '';
             const text = $(el).text().trim();
-            const parentBlock = $(el).closest('tr, .download-row, div').text();
+            const parentBlock = $(el).closest('tr, .download-row, .links-box, div').text();
 
-            if (href.includes('pixeldrain.com') || href.includes('t.me/') || href.includes('streamx.link') || href.includes('dl.')) {
+            // Check if link belongs to pixeldrain, telegram, streamx or external server
+            if (href && (href.includes('pixeldrain.com') || href.includes('t.me/') || href.includes('streamx.link') || href.includes('dl.') || href.includes('drive.'))) {
                 let qName = "HD";
                 if (text.match(/480p/i) || parentBlock.match(/480p/i)) qName = "480p";
                 else if (text.match(/720p/i) || parentBlock.match(/720p/i)) qName = "720p";
@@ -174,6 +174,7 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
                 let typeLabel = "Direct DL";
                 if (href.includes('pixeldrain')) typeLabel = "PixelDrain";
                 else if (href.includes('t.me/')) typeLabel = "Telegram Bot";
+                else if (href.includes('streamx.link')) typeLabel = "Direct High-Speed Server";
 
                 let size = "N/A";
                 const sizeMatch = parentBlock.match(/(\d+(\.\d+)?\s*(MB|GB))/i);
@@ -190,7 +191,7 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
             }
         });
 
-        console.log(`🎉 Successfully extracted ${downloads.length} download links from Chithrapata!`);
+        console.log(`🎉 Successfully extracted ${downloads.length} download links!`);
         console.log(`==============================================\n`);
 
         if (!res.headersSent) {
