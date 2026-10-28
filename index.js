@@ -27,7 +27,7 @@ app.get('/', (req, res) => {
     });
 });
 
-// 1. Latest Movies Endpoint
+// 1. Latest Movies Endpoint (Universal Selector)
 app.get('/api/v1/chithrapata/latest', async (req, res) => {
     try {
         const pageNum = req.query.page || 1;
@@ -37,18 +37,25 @@ app.get('/api/v1/chithrapata/latest', async (req, res) => {
         const $ = cheerio.load(response.data);
         const results = [];
 
-        $('.item, article, .post').each((i, el) => {
-            const title = $(el).find('.title, h2, h3').text().trim();
-            const link = $(el).find('a').attr('href') || '';
-            let img = $(el).find('img').attr('src') || $(el).find('img').attr('data-src') || '';
-            if (img.startsWith('//')) img = 'https:' + img;
+        // Universal scraping for movie cards
+        $('a').each((i, el) => {
+            const href = $(el).attr('href') || '';
+            const parent = $(el).closest('article, .item, .post, div');
             
-            const quality = $(el).find('.quality, .badge').text().trim() || 'WEB-DL';
-            const rating = $(el).find('.rating, .imdb').text().trim() || 'N/A';
+            let title = $(el).find('h2, h3, .title').text().trim();
+            if (!title) title = $(el).attr('title') || '';
+            if (!title) title = $(el).text().trim();
 
-            if (link && title) {
-                if (!results.some(r => r.link === link)) {
-                    results.push({ title, image: img, quality, rating, link });
+            let img = $(el).find('img').attr('src') || $(el).find('img').attr('data-src') || parent.find('img').attr('src') || parent.find('img').attr('data-src') || '';
+            if (img.startsWith('//')) img = 'https:' + img;
+
+            let quality = parent.find('.quality, .badge').text().trim() || 'WEB-DL';
+            let rating = parent.find('.rating, .imdb').text().trim() || 'N/A';
+
+            if (href.includes('/movies/') && title.length > 2 && img) {
+                title = title.replace(/\t|\n/g, '').trim();
+                if (!results.some(r => r.link === href)) {
+                    results.push({ title, image: img, quality, rating, link: href });
                 }
             }
         });
@@ -59,7 +66,7 @@ app.get('/api/v1/chithrapata/latest', async (req, res) => {
     }
 });
 
-// 2. Search Endpoint
+// 2. Search Endpoint (Universal Selector)
 app.get('/api/v1/chithrapata/search', async (req, res) => {
     try {
         const query = req.query.q;
@@ -70,18 +77,24 @@ app.get('/api/v1/chithrapata/search', async (req, res) => {
         const $ = cheerio.load(response.data);
         const results = [];
 
-        $('.item, article, .post').each((i, el) => {
-            const title = $(el).find('.title, h2, h3').text().trim();
-            const link = $(el).find('a').attr('href') || '';
-            let img = $(el).find('img').attr('src') || $(el).find('img').attr('data-src') || '';
-            if (img.startsWith('//')) img = 'https:' + img;
+        $('a').each((i, el) => {
+            const href = $(el).attr('href') || '';
+            const parent = $(el).closest('article, .item, .post, .result-item, div');
             
-            const quality = $(el).find('.quality, .badge').text().trim() || 'WEB-DL';
-            const rating = $(el).find('.rating, .imdb').text().trim() || 'N/A';
+            let title = $(el).find('h2, h3, .title').text().trim();
+            if (!title) title = $(el).attr('title') || '';
+            if (!title) title = $(el).text().trim();
 
-            if (link && title) {
-                if (!results.some(r => r.link === link)) {
-                    results.push({ title, image: img, quality, rating, link });
+            let img = $(el).find('img').attr('src') || $(el).find('img').attr('data-src') || parent.find('img').attr('src') || parent.find('img').attr('data-src') || '';
+            if (img.startsWith('//')) img = 'https:' + img;
+
+            let quality = parent.find('.quality, .badge').text().trim() || 'WEB-DL';
+            let rating = parent.find('.rating, .imdb').text().trim() || 'N/A';
+
+            if (href.includes('/movies/') && title.length > 2 && img) {
+                title = title.replace(/\t|\n/g, '').trim();
+                if (!results.some(r => r.link === href)) {
+                    results.push({ title, image: img, quality, rating, link: href });
                 }
             }
         });
