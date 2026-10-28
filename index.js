@@ -104,7 +104,7 @@ app.get('/api/v1/chithrapata/search', async (req, res) => {
     }
 });
 
-// Helper function to resolve final destination links and accurately detect type
+// Helper function to resolve final destination links
 async function resolveFinalLink(linkUrl) {
     if (!linkUrl.includes('/links/')) return linkUrl;
     try {
@@ -128,9 +128,8 @@ async function resolveFinalLink(linkUrl) {
     }
 }
 
-// 3. Info & Download Endpoint (Smart Link Resolution & Accurate Type Detection)
+// 3. Info & Download Endpoint (Precise Row-by-Row Quality & Size Extraction)
 app.get('/api/v1/chithrapata/infodl', async (req, res) => {
-    // Increased timeout to 60 seconds
     req.setTimeout(60000);
     res.setTimeout(60000, () => {
         if (!res.headersSent) {
@@ -183,40 +182,63 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
 
         const rawDownloads = [];
         
-        $('a').each((i, el) => {
-            const href = $(el).attr('href') || '';
-            const text = $(el).text().trim();
-            const parentBlock = $(el).closest('tr, div, section, li, ul');
-            const parentText = parentBlock.text();
+        // 🎯 Target table rows or container blocks to accurately bind quality and size to each link
+        $('tr, .download-row, li, .item-link').each((i, rowEl) => {
+            const rowText = $(rowEl).text();
+            const linkTag = $(rowEl).find('a').attr('href');
 
-            if (href && (href.includes('/links/') || href.includes('pixeldrain.com') || href.includes('t.me/') || href.includes('streamx.link'))) {
+            if (linkTag && (linkTag.includes('/links/') || linkTag.includes('pixeldrain.com') || linkTag.includes('t.me/') || linkTag.includes('streamx.link'))) {
                 
+                // Detect specific quality from this exact row
                 let qName = "HD 720p";
-                if (text.match(/1080p|FHD/i) || parentText.match(/1080p|FHD/i)) qName = "FHD 1080p";
-                else if (text.match(/720p|HD/i) || parentText.match(/720p|HD/i)) qName = "HD 720p";
-                else if (text.match(/480p/i) || parentText.match(/480p/i)) qName = "480p";
-                else if (text.match(/2160p|4k/i) || parentText.match(/2160p|4k/i)) qName = "4K 2160p";
+                if (rowText.match(/1080p|FHD/i)) qName = "FHD 1080p";
+                else if (rowText.match(/720p|HD/i)) qName = "HD 720p";
+                else if (rowText.match(/480p/i)) qName = "480p";
+                else if (rowText.match(/2160p|4k/i)) qName = "4K 2160p";
 
+                // Detect specific file size from this exact row
                 let size = "N/A";
-                const sizeMatch = parentText.match(/(\d+(\.\d+)?\s*(MB|GB))/i);
+                const sizeMatch = rowText.match(/(\d+(\.\d+)?\s*(MB|GB))/i);
                 if (sizeMatch) size = sizeMatch[0];
 
-                if (!rawDownloads.some(d => d.link === href)) {
+                if (!rawDownloads.some(d => d.link === linkTag)) {
                     rawDownloads.push({
                         qName,
                         size,
-                        link: href
+                        link: linkTag
                     });
                 }
             }
         });
 
-        // Resolve final destination links and accurately classify based on the final URL
+        // Fallback check if table rows weren't caught
+        if (rawDownloads.length === 0) {
+            $('a').each((i, el) => {
+                const href = $(el).attr('href') || '';
+                const text = $(el).text().trim();
+                const parentText = $(el).closest('div, section').text();
+
+                if (href && (href.includes('/links/') || href.includes('pixeldrain.com') || href.includes('t.me/') || href.includes('streamx.link'))) {
+                    let qName = "HD 720p";
+                    if (text.match(/1080p|FHD/i) || parentText.match(/1080p|FHD/i)) qName = "FHD 1080p";
+                    else if (text.match(/720p|HD/i) || parentText.match(/720p|HD/i)) qName = "HD 720p";
+
+                    let size = "N/A";
+                    const sizeMatch = parentText.match(/(\d+(\.\d+)?\s*(MB|GB))/i);
+                    if (sizeMatch) size = sizeMatch[0];
+
+                    if (!rawDownloads.some(d => d.link === href)) {
+                        rawDownloads.push({ qName, size, link: href });
+                    }
+                }
+            });
+        }
+
+        // Resolve final destination links and accurately classify type
         const downloads = [];
         for (const item of rawDownloads) {
             const finalUrl = await resolveFinalLink(item.link);
 
-            // 🎯 Classify accurately based on the resolved destination URL
             let typeLabel = "Direct DL";
             if (finalUrl.includes('pixeldrain')) {
                 typeLabel = "PixelDrain";
@@ -234,7 +256,7 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
             });
         }
 
-        console.log(`🎉 Successfully processed and classified ${downloads.length} download links!`);
+        console.log(`🎉 Successfully processed ${downloads.length} links with accurate quality and size!`);
         console.log(`==============================================\n`);
 
         if (!res.headersSent) {
