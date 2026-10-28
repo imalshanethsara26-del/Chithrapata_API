@@ -1,11 +1,10 @@
 {
   "name": "chithrapata-node-api",
   "version": "1.0.0",
-  "description": "Lightning Fast Chithrapata API with Puppeteer Tab Scraper by Imalsha",
+  "description": "Chithrapata API with Puppeteer Tab Scraper by Imalsha",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "postinstall": "npx puppeteer browsers install chrome"
+    "start": "node index.js"
   },
   "dependencies": {
     "axios": "^1.6.8",
