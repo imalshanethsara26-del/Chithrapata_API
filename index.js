@@ -104,19 +104,18 @@ app.get('/api/v1/chithrapata/search', async (req, res) => {
     }
 });
 
-// Helper function to resolve redirect / actual destination links
+// Helper function to resolve final destination links and accurately detect type
 async function resolveFinalLink(linkUrl) {
     if (!linkUrl.includes('/links/')) return linkUrl;
     try {
-        const res = await axios.get(linkUrl, { headers: HEADERS, timeout: 10000, maxRedirects: 5 });
+        const res = await axios.get(linkUrl, { headers: HEADERS, timeout: 15000, maxRedirects: 5 });
         const $ = cheerio.load(res.data);
         
-        // Look for 'Continue' button link or external streaming/download links inside the redirect page
         let finalTarget = '';
         $('a').each((i, el) => {
             const href = $(el).attr('href') || '';
             const txt = $(el).text().trim().toLowerCase();
-            if (href && (txt.includes('continue') || href.includes('streamx.link') || href.includes('pixeldrain.com') || href.includes('dl.'))) {
+            if (href && (txt.includes('continue') || href.includes('pixeldrain.com') || href.includes('t.me/') || href.includes('dl.') || href.includes('streamx.link'))) {
                 if (!href.includes('/links/')) {
                     finalTarget = href;
                 }
@@ -129,8 +128,10 @@ async function resolveFinalLink(linkUrl) {
     }
 }
 
-// 3. Info & Download Endpoint (Resolving actual target links)
+// 3. Info & Download Endpoint (Smart Link Resolution & Accurate Type Detection)
 app.get('/api/v1/chithrapata/infodl', async (req, res) => {
+    // Increased timeout to 60 seconds
+    req.setTimeout(60000);
     res.setTimeout(60000, () => {
         if (!res.headersSent) {
             res.status(504).json({ status: false, error: "Gateway Timeout" });
@@ -144,7 +145,7 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
     console.log(`🔥 [CHITHRAPATA API] Processing: ${movieUrl}`);
 
     try {
-        const movieRes = await axios.get(movieUrl, { headers: HEADERS, timeout: 45000 });
+        const movieRes = await axios.get(movieUrl, { headers: HEADERS, timeout: 60000 });
         const $ = cheerio.load(movieRes.data);
 
         const title = $('meta[property="og:title"]').attr('content') || $('h1').text().trim() || 'Unknown';
@@ -196,43 +197,44 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
                 else if (text.match(/480p/i) || parentText.match(/480p/i)) qName = "480p";
                 else if (text.match(/2160p|4k/i) || parentText.match(/2160p|4k/i)) qName = "4K 2160p";
 
-                let typeLabel = "Direct DL";
-                if (href.includes('pixeldrain') || parentText.toLowerCase().includes('pixeldrain')) {
-                    typeLabel = "PixelDrain";
-                } else if (href.includes('t.me/')) {
-                    typeLabel = "Telegram Bot";
-                } else {
-                    typeLabel = "Direct DL";
-                }
-
                 let size = "N/A";
                 const sizeMatch = parentText.match(/(\d+(\.\d+)?\s*(MB|GB))/i);
                 if (sizeMatch) size = sizeMatch[0];
 
-                const formattedQuality = `WEB-DL ${qName} [${typeLabel}]`;
-
                 if (!rawDownloads.some(d => d.link === href)) {
                     rawDownloads.push({
-                        quality: formattedQuality,
+                        qName,
                         size,
-                        language: "English / Sinhala Sub",
                         link: href
                     });
                 }
             }
         });
 
-        // Resolve final destination links asynchronously
+        // Resolve final destination links and accurately classify based on the final URL
         const downloads = [];
         for (const item of rawDownloads) {
-            const resolvedLink = await resolveFinalLink(item.link);
+            const finalUrl = await resolveFinalLink(item.link);
+
+            // 🎯 Classify accurately based on the resolved destination URL
+            let typeLabel = "Direct DL";
+            if (finalUrl.includes('pixeldrain')) {
+                typeLabel = "PixelDrain";
+            } else if (finalUrl.includes('t.me/')) {
+                typeLabel = "Telegram Bot";
+            } else {
+                typeLabel = "Direct DL";
+            }
+
             downloads.push({
-                ...item,
-                link: resolvedLink
+                quality: `WEB-DL ${item.qName} [${typeLabel}]`,
+                size: item.size,
+                language: "English / Sinhala Sub",
+                link: finalUrl
             });
         }
 
-        console.log(`🎉 Successfully resolved ${downloads.length} final download links!`);
+        console.log(`🎉 Successfully processed and classified ${downloads.length} download links!`);
         console.log(`==============================================\n`);
 
         if (!res.headersSent) {
