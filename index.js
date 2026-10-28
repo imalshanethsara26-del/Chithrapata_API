@@ -27,7 +27,7 @@ app.get('/', (req, res) => {
     });
 });
 
-// 1. Latest / Recently Added Movies Endpoint (Updated for exact site structure)
+// 1. Latest / Recently Added Movies Endpoint
 app.get('/api/v1/chithrapata/latest', async (req, res) => {
     try {
         const pageNum = req.query.page || 1;
@@ -37,7 +37,6 @@ app.get('/api/v1/chithrapata/latest', async (req, res) => {
         const $ = cheerio.load(response.data);
         const results = [];
 
-        // Target movie articles / items specifically to avoid footer/menu noise
         $('article, .item, .post, .result-item, .box').each((i, el) => {
             const aTag = $(el).find('a').first();
             const href = aTag.attr('href') || $(el).find('a').attr('href') || '';
@@ -48,8 +47,8 @@ app.get('/api/v1/chithrapata/latest', async (req, res) => {
 
             let img = $(el).find('img').attr('src') || $(el).find('img').attr('data-src') || $(el).find('img').attr('srcset') || '';
             if (img.startsWith('//')) img = 'https:' + img;
-            if (img.includes('srcset') || !img) {
-                img = $(el).find('img').attr('data-lazy-src') || $(el).find('img').attr('src') || '';
+            if (!img) {
+                img = $(el).find('img').attr('data-lazy-src') || '';
             }
 
             let quality = $(el).find('.quality, .badge, .mtype').text().trim() || 'WEB-DL';
@@ -63,7 +62,6 @@ app.get('/api/v1/chithrapata/latest', async (req, res) => {
             }
         });
 
-        // Fallback if structured articles don't catch enough
         if (results.length === 0) {
             $('a').each((i, el) => {
                 const href = $(el).attr('href') || '';
@@ -74,7 +72,7 @@ app.get('/api/v1/chithrapata/latest', async (req, res) => {
                 let quality = parent.find('.quality, .badge').text().trim() || 'WEB-DL';
                 let rating = parent.find('.rating').text().trim() || 'N/A';
 
-                if (href.includes('/movies/') && title.length > 2 && img) {
+                if (href && href.includes('/movies/') && title.length > 2 && img) {
                     if (!results.some(r => r.link === href)) {
                         results.push({ title, image: img, quality, rating, link: href });
                     }
@@ -145,7 +143,7 @@ async function resolveFinalLink(linkUrl) {
     }
 }
 
-// 3. Info & Download Endpoint
+// 3. Info & Download Endpoint (Fixed Syntax Error on line 165)
 app.get('/api/v1/chithrapata/infodl', async (req, res) => {
     req.setTimeout(60000);
     res.setTimeout(60000, () => {
@@ -162,7 +160,7 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
         const $ = cheerio.load(movieRes.data);
 
         const title = $('meta[property="og:title"]').attr('content') || $('h1').text().trim() || 'Unknown';
-        const image = $('meta[property="og:image"]').attr('content'] || '';
+        const image = $('meta[property="og:image"]').attr('content') || ''; // <-- මෙතන බරහන නිවැරදි කළා ()
         const quality = $('.quality').first().text().trim() || 'WEB-DL';
         
         let rating = 'N/A';
