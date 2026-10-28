@@ -227,7 +227,7 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
         }
 
     } catch (err) {
-        console.error(`❌ [API ERROR]: `${err.message}`);
+        console.error(`❌ [API ERROR]: ${err.message}`);
         if (!res.headersSent) {
             res.status(500).json({ status: false, error: err.message });
         }
