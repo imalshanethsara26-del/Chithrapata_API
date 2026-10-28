@@ -1,17 +1,18 @@
 {
   "name": "chithrapata-node-api",
   "version": "1.0.0",
-  "description": "Chithrapata API with Puppeteer Tab Scraper by Imalsha",
+  "description": "Chithrapata API with Sparticuz Chromium by Imalsha",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
+    "@sparticuz/chromium": "^123.0.1",
     "axios": "^1.6.8",
     "cheerio": "^1.0.0-rc.12",
     "cors": "^2.8.5",
     "express": "^4.19.2",
-    "puppeteer": "^22.15.0"
+    "puppeteer-core": "^22.15.0"
   },
   "engines": {
     "node": ">=18.0.0"
