@@ -1,7 +1,8 @@
 const express = require('express');
 const axios = require('axios');
 const cheerio = require('cheerio');
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-core');
+const chromium = require('@sparticuz/chromium');
 const cors = require('cors');
 
 const app = express();
@@ -19,7 +20,7 @@ const HEADERS = {
 app.get('/', (req, res) => {
     res.json({
         status: true,
-        message: "IMALSHA CHITHRAPATA PUPPETEER API is Live 🚀",
+        message: "IMALSHA CHITHRAPATA CHROMIUM API is Live 🚀",
         endpoints: {
             latest: "/api/v1/chithrapata/latest?page=1",
             search: "/api/v1/chithrapata/search?q=movie_name",
@@ -105,7 +106,7 @@ app.get('/api/v1/chithrapata/search', async (req, res) => {
     }
 });
 
-// 3. Info & Download Endpoint (Puppeteer tab clicker)
+// 3. Info & Download Endpoint (Sparticuz Chromium Tab Clicker)
 app.get('/api/v1/chithrapata/infodl', async (req, res) => {
     res.setTimeout(60000, () => {
         if (!res.headersSent) {
@@ -117,22 +118,18 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
     if (!movieUrl) return res.status(400).json({ status: false, message: "URL required" });
 
     console.log(`\n==============================================`);
-    console.log(`🔥 [CHITHRAPATA PUPPETEER API] Processing: ${movieUrl}`);
+    console.log(`🔥 [CHITHRAPATA CHROMIUM API] Processing: ${movieUrl}`);
 
     let browser = null;
     try {
         browser = await puppeteer.launch({
-            headless: true,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--disable-gpu',
-                '--no-zygote',
-                '--single-process'
-            ]
+            args: chromium.args,
+            defaultViewport: chromium.defaultViewport,
+            executablePath: await chromium.executablePath(),
+            headless: chromium.headless,
+            ignoreHTTPSErrors: true,
         });
+
         const page = await browser.newPage();
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
 
@@ -224,7 +221,7 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
 
         if (browser) await browser.close();
 
-        console.log(`🎉 Successfully extracted ${downloads.length} download links via Puppeteer!`);
+        console.log(`🎉 Successfully extracted ${downloads.length} download links via Chromium!`);
         console.log(`==============================================\n`);
 
         if (!res.headersSent) {
