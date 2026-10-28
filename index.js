@@ -104,7 +104,32 @@ app.get('/api/v1/chithrapata/search', async (req, res) => {
     }
 });
 
-// 3. Info & Download Endpoint (Precise Quality & Type Mapping)
+// Helper function to resolve redirect / actual destination links
+async function resolveFinalLink(linkUrl) {
+    if (!linkUrl.includes('/links/')) return linkUrl;
+    try {
+        const res = await axios.get(linkUrl, { headers: HEADERS, timeout: 10000, maxRedirects: 5 });
+        const $ = cheerio.load(res.data);
+        
+        // Look for 'Continue' button link or external streaming/download links inside the redirect page
+        let finalTarget = '';
+        $('a').each((i, el) => {
+            const href = $(el).attr('href') || '';
+            const txt = $(el).text().trim().toLowerCase();
+            if (href && (txt.includes('continue') || href.includes('streamx.link') || href.includes('pixeldrain.com') || href.includes('dl.'))) {
+                if (!href.includes('/links/')) {
+                    finalTarget = href;
+                }
+            }
+        });
+
+        return finalTarget || linkUrl;
+    } catch (e) {
+        return linkUrl;
+    }
+}
+
+// 3. Info & Download Endpoint (Resolving actual target links)
 app.get('/api/v1/chithrapata/infodl', async (req, res) => {
     res.setTimeout(60000, () => {
         if (!res.headersSent) {
@@ -155,7 +180,7 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
             if (src) gallery.push(src);
         });
 
-        const downloads = [];
+        const rawDownloads = [];
         
         $('a').each((i, el) => {
             const href = $(el).attr('href') || '';
@@ -186,8 +211,8 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
 
                 const formattedQuality = `WEB-DL ${qName} [${typeLabel}]`;
 
-                if (!downloads.some(d => d.link === href)) {
-                    downloads.push({
+                if (!rawDownloads.some(d => d.link === href)) {
+                    rawDownloads.push({
                         quality: formattedQuality,
                         size,
                         language: "English / Sinhala Sub",
@@ -197,7 +222,17 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
             }
         });
 
-        console.log(`🎉 Successfully extracted ${downloads.length} formatted download links!`);
+        // Resolve final destination links asynchronously
+        const downloads = [];
+        for (const item of rawDownloads) {
+            const resolvedLink = await resolveFinalLink(item.link);
+            downloads.push({
+                ...item,
+                link: resolvedLink
+            });
+        }
+
+        console.log(`🎉 Successfully resolved ${downloads.length} final download links!`);
         console.log(`==============================================\n`);
 
         if (!res.headersSent) {
