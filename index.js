@@ -28,7 +28,7 @@ app.get('/', (req, res) => {
     });
 });
 
-// 1. Movies / Latest Endpoint (Scraping from https://chithrapata.com/movies/)
+// 1. Movies / Latest Endpoint (Pagination supported via /movies/page/X/)
 app.get('/api/v1/chithrapata/latest', async (req, res) => {
     try {
         const pageNum = req.query.page || 1;
@@ -144,7 +144,7 @@ async function resolveFinalLink(linkUrl) {
     }
 }
 
-// 3. Info & Download Endpoint
+// 3. Info & Download Endpoint (With Improved Size Extraction)
 app.get('/api/v1/chithrapata/infodl', async (req, res) => {
     req.setTimeout(60000);
     res.setTimeout(60000, () => {
@@ -205,17 +205,22 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
         $('a').each((i, el) => {
             const href = $(el).attr('href') || '';
             const text = $(el).text().trim();
-            const parentText = $(el).closest('div, section, tr').text();
+            const parentText = $(el).closest('div, section, tr, p, li').text();
+            const grandParentText = $(el).closest('div.download-box, .box, .wp-block-button').text();
 
             if (href && (href.includes('/links/') || href.includes('pixeldrain.com') || href.includes('t.me/') || href.includes('streamx.link'))) {
                 let qName = "HD 720p";
                 if (text.match(/1080p|FHD/i) || parentText.match(/1080p|FHD/i)) qName = "FHD 1080p";
                 else if (text.match(/720p|HD/i) || parentText.match(/720p|HD/i)) qName = "HD 720p";
                 else if (text.match(/480p/i)) qName = "480p";
+                else if (text.match(/2160p|4k/i)) qName = "4K 2160p";
 
                 let size = "N/A";
-                const sizeMatch = parentText.match(/(\d+(\.\d+)?\s*(MB|GB))/i);
-                if (sizeMatch) size = sizeMatch[0];
+                const combinedText = `${text} ${parentText} ${grandParentText}`;
+                const sizeMatch = combinedText.match(/(\d+(\.\d+)?\s*(MB|GB|mb|gb))/i);
+                if (sizeMatch && sizeMatch[0]) {
+                    size = sizeMatch[0].trim();
+                }
 
                 if (!rawDownloads.some(d => d.link === href)) {
                     rawDownloads.push({ qName, size, link: href });
