@@ -9,6 +9,7 @@ const PORT = process.env.PORT || 8080;
 app.use(cors());
 
 const BASE_URL = 'https://chithrapata.com';
+const MOVIES_URL = 'https://chithrapata.com/movies';
 const HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
     'Referer': 'https://chithrapata.com/'
@@ -27,13 +28,13 @@ app.get('/', (req, res) => {
     });
 });
 
-// 1. Latest / Recently Added Movies Endpoint
+// 1. Movies / Latest Endpoint (Scraping from https://chithrapata.com/movies/)
 app.get('/api/v1/chithrapata/latest', async (req, res) => {
     try {
         const pageNum = req.query.page || 1;
-        const latestUrl = pageNum == 1 ? `${BASE_URL}/` : `${BASE_URL}/page/${pageNum}/`;
+        const targetUrl = pageNum == 1 ? `${MOVIES_URL}/` : `${MOVIES_URL}/page/${pageNum}/`;
         
-        const response = await axios.get(latestUrl, { headers: HEADERS, timeout: 30000 });
+        const response = await axios.get(targetUrl, { headers: HEADERS, timeout: 30000 });
         const $ = cheerio.load(response.data);
         const results = [];
 
@@ -143,7 +144,7 @@ async function resolveFinalLink(linkUrl) {
     }
 }
 
-// 3. Info & Download Endpoint (Fixed Syntax Error on line 165)
+// 3. Info & Download Endpoint
 app.get('/api/v1/chithrapata/infodl', async (req, res) => {
     req.setTimeout(60000);
     res.setTimeout(60000, () => {
@@ -160,7 +161,7 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
         const $ = cheerio.load(movieRes.data);
 
         const title = $('meta[property="og:title"]').attr('content') || $('h1').text().trim() || 'Unknown';
-        const image = $('meta[property="og:image"]').attr('content') || ''; // <-- මෙතන බරහන නිවැරදි කළා ()
+        const image = $('meta[property="og:image"]').attr('content') || '';
         const quality = $('.quality').first().text().trim() || 'WEB-DL';
         
         let rating = 'N/A';
@@ -250,7 +251,7 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
                 imdb: rating !== 'N/A' ? `${rating} (IMDb)` : 'N/A',
                 director,
                 country,
-                language: "ENGLISH",
+                language: "",
                 genres,
                 story: story || 'No description available',
                 cast,
@@ -267,4 +268,4 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
     }
 });
 
-app.listen(PORT, () => console.log(`Chithrapata API running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Chithrapata API server running on port ${PORT}`));
