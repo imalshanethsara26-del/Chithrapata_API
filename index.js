@@ -105,11 +105,16 @@ app.get('/api/v1/chithrapata/search', async (req, res) => {
     }
 });
 
-// Helper function to resolve final destination links
+// Helper function to resolve final destination links & Auto-convert PixelDrain to Direct API format
 async function resolveFinalLink(linkUrl) {
-    if (!linkUrl.includes('/links/')) return linkUrl;
+    let target = linkUrl;
+    if (target.includes('pixeldrain.com/u/')) {
+        target = target.replace('pixeldrain.com/u/', 'pixeldrain.com/api/file/');
+    }
+
+    if (!target.includes('/links/')) return target;
     try {
-        const res = await axios.get(linkUrl, { headers: HEADERS, timeout: 15000, maxRedirects: 5 });
+        const res = await axios.get(target, { headers: HEADERS, timeout: 15000, maxRedirects: 5 });
         const $ = cheerio.load(res.data);
         
         let finalTarget = '';
@@ -123,9 +128,13 @@ async function resolveFinalLink(linkUrl) {
             }
         });
 
-        return finalTarget || linkUrl;
+        let resolved = finalTarget || target;
+        if (resolved.includes('pixeldrain.com/u/')) {
+            resolved = resolved.replace('pixeldrain.com/u/', 'pixeldrain.com/api/file/');
+        }
+        return resolved;
     } catch (e) {
-        return linkUrl;
+        return target;
     }
 }
 
@@ -282,7 +291,12 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
 
         const downloads = [];
         for (const item of rawDownloads) {
-            const finalUrl = await resolveFinalLink(item.link);
+            let finalUrl = await resolveFinalLink(item.link);
+
+            // Ensure PixelDrain links are always converted to Direct API format
+            if (finalUrl.includes('pixeldrain.com/u/')) {
+                finalUrl = finalUrl.replace('pixeldrain.com/u/', 'pixeldrain.com/api/file/');
+            }
 
             let typeLabel = "Direct DL";
             if (finalUrl.includes('pixeldrain')) {
