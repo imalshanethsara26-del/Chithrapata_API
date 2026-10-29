@@ -148,7 +148,20 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
         const movieRes = await axios.get(movieUrl, { headers: HEADERS, timeout: 60000 });
         const $ = cheerio.load(movieRes.data);
 
-        const title = $('meta[property="og:title"]').attr('content') || $('h1').text().trim() || 'Unknown';
+        // Fixed Title Extraction logic so it never returns 'Unknown'
+        let title = $('meta[property="og:title"]').attr('content') || 
+                    $('h1.entry-title').text().trim() || 
+                    $('.sheader h1').text().trim() || 
+                    $('h1').text().trim() || 
+                    $('title').text().trim() || 
+                    'Unknown';
+
+        if (title.includes('|')) {
+            title = title.split('|')[0].trim();
+        } else if (title.includes('-')) {
+            title = title.split('-')[0].trim();
+        }
+
         const image = $('meta[property="og:image"]').attr('content') || '';
         const quality = $('.quality').first().text().trim() || 'WEB-DL';
         
