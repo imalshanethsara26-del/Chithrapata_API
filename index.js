@@ -2,11 +2,15 @@ const express = require('express');
 const axios = require('axios');
 const cheerio = require('cheerio');
 const cors = require('cors');
+const NodeCache = require('node-cache');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
 
 app.use(cors());
+
+// Cache එකක් හදාගන්න (පැය 24කට ඩේටා මෙවලම් වල සේව් වී තිබේ)
+const appCache = new NodeCache({ stdTTL: 86400 });
 
 const BASE_URL = 'https://chithrapata.com';
 const MOVIES_URL = 'https://chithrapata.com/movies';
@@ -28,12 +32,18 @@ app.get('/', (req, res) => {
     });
 });
 
-// 1. Latest / Movies Endpoint (Updated with /movies/ and Pagination support)
+// 1. Latest / Movies Endpoint (Cache එක්ක)
 app.get('/api/v1/chithrapata/latest', async (req, res) => {
     try {
         const pageNum = req.query.page || 1;
+        const cacheKey = `latest_page_${pageNum}`;
+
+        if (appCache.has(cacheKey)) {
+            console.log(`⚡ [CACHE HIT] Serving latest page ${pageNum}`);
+            return res.json(appCache.get(cacheKey));
+        }
+
         const targetUrl = pageNum == 1 ? `${MOVIES_URL}/` : `${MOVIES_URL}/page/${pageNum}/`;
-        
         const response = await axios.get(targetUrl, { headers: HEADERS, timeout: 30000 });
         const $ = cheerio.load(response.data);
         const results = [];
@@ -60,17 +70,26 @@ app.get('/api/v1/chithrapata/latest', async (req, res) => {
             }
         });
 
-        res.json({ status: true, creator: "@Imalsha", site: "chithrapata", page: Number(pageNum), results_count: results.length, data: results });
+        const responseData = { status: true, creator: "@Imalsha", site: "chithrapata", page: Number(pageNum), results_count: results.length, data: results };
+        appCache.set(cacheKey, responseData);
+
+        res.json(responseData);
     } catch (err) {
         res.status(500).json({ status: false, error: err.message });
     }
 });
 
-// 2. Search Endpoint (Your original stable logic)
+// 2. Search Endpoint (Cache එක්ක)
 app.get('/api/v1/chithrapata/search', async (req, res) => {
     try {
         const query = req.query.q;
         if (!query) return res.status(400).json({ status: false, message: "Search term required" });
+
+        const cacheKey = `search_${query.toLowerCase().trim()}`;
+        if (appCache.has(cacheKey)) {
+            console.log(`⚡ [CACHE HIT] Serving search: ${query}`);
+            return res.json(appCache.get(cacheKey));
+        }
 
         const searchUrl = `${BASE_URL}/?s=` + encodeURIComponent(query);
         const response = await axios.get(searchUrl, { headers: HEADERS, timeout: 30000 });
@@ -99,13 +118,16 @@ app.get('/api/v1/chithrapata/search', async (req, res) => {
             }
         });
 
-        res.json({ status: true, creator: "@Imalsha", site: "chithrapata", results_count: results.length, data: results });
+        const responseData = { status: true, creator: "@Imalsha", site: "chithrapata", results_count: results.length, data: results };
+        appCache.set(cacheKey, responseData);
+
+        res.json(responseData);
     } catch (err) {
         res.status(500).json({ status: false, error: err.message });
     }
 });
 
-// Helper function to resolve final destination links & Auto-convert PixelDrain to Direct API format
+// Helper function to resolve final destination links
 async function resolveFinalLink(linkUrl) {
     let target = linkUrl;
     if (target.includes('pixeldrain.com/u/')) {
@@ -138,7 +160,7 @@ async function resolveFinalLink(linkUrl) {
     }
 }
 
-// 3. Info & Download Endpoint (Your original stable logic)
+// 3. Info & Download Endpoint (Dynamic Year, Genres, Duration fix + Cache)
 app.get('/api/v1/chithrapata/infodl', async (req, res) => {
     req.setTimeout(60000);
     res.setTimeout(60000, () => {
@@ -150,14 +172,20 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
     const movieUrl = req.query.url;
     if (!movieUrl) return res.status(400).json({ status: false, message: "URL required" });
 
+    const cacheKey = `infodl_${movieUrl}`;
+    if (appCache.has(cacheKey)) {
+        console.log(`⚡ [CACHE HIT] Serving infodl from memory: ${movieUrl}`);
+        return res.json(appCache.get(cacheKey));
+    }
+
     console.log(`\n==============================================`);
-    console.log(`🔥 [CHITHRAPATA API] Processing: ${movieUrl}`);
+    console.log(`🔥 [CHITHRAPATA API] Processing (Fresh): ${movieUrl}`);
 
     try {
         const movieRes = await axios.get(movieUrl, { headers: HEADERS, timeout: 60000 });
         const $ = cheerio.load(movieRes.data);
 
-        // Fixed Title Extraction logic so it never returns 'Unknown'
+        // Title Extraction
         let title = $('meta[property="og:title"]').attr('content') || 
                     $('h1.entry-title').text().trim() || 
                     $('.sheader h1').text().trim() || 
@@ -171,11 +199,25 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
             title = title.split('-')[0].trim();
         }
 
+        // Dynamic Year Extraction (Title එකෙන් හෝ Page text එකෙන් අවුරුද්ද සෙවීම)
+        let year = '2026';
+        const yearMatch = title.match(/\((\d{4})\)/) || $.text().match(/\b(19\d{2}|20\d{2})\b/);
+        if (yearMatch && yearMatch[1]) {
+            year = yearMatch[1];
+        }
+
+        // Dynamic Duration / Runtime Extraction (උදා: 160 min)
+        let duration = 'N/A';
+        const fullText = $.text();
+        const durationMatch = fullText.match(/(\d+\s*min[s]?)/i);
+        if (durationMatch && durationMatch[1]) {
+            duration = durationMatch[1];
+        }
+
         const image = $('meta[property="og:image"]').attr('content') || '';
         const quality = $('.quality').first().text().trim() || 'WEB-DL';
         
         let rating = 'N/A';
-        const fullText = $.text();
         const imdbMatch = fullText.match(/IMDb[:\s]*([0-9.]+)/i);
         if (imdbMatch && imdbMatch[1]) {
             rating = imdbMatch[1];
@@ -201,13 +243,16 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
             }
         });
 
+        // Dynamic Genres Extraction (වෙබ් අඩවියේ ඇති ප්‍රභේද නිවැරදිව ලබා ගැනීම)
         const genres = [];
         $('.genres a, .sgeneros a, .cat-links a').each((i, el) => {
-            genres.push($(el).text().trim());
+            const g = $(el).text().trim();
+            if (g && !genres.includes(g)) genres.push(g);
         });
 
         if (genres.length === 0) {
-            genres.push("Crime", "Drama", "Thriller", "Sinhala Subtitles");
+            // Screen එකේ පෙන්වන විදිහට සජීවීව Text එකෙන් හෝ Fallback දීම
+            genres.push("Drama", "Romance", "Sinhala Subtitles");
         }
 
         const cast = [];
@@ -240,7 +285,6 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
         });
 
         const rawDownloads = [];
-        
         $('tr, .download-row, li, .item-link').each((i, rowEl) => {
             const rowText = $(rowEl).text();
             const linkTag = $(rowEl).find('a').attr('href');
@@ -258,11 +302,7 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
                 if (sizeMatch) size = sizeMatch[0];
 
                 if (!rawDownloads.some(d => d.link === linkTag)) {
-                    rawDownloads.push({
-                        qName,
-                        size,
-                        link: linkTag
-                    });
+                    rawDownloads.push({ qName, size, link: linkTag });
                 }
             }
         });
@@ -293,7 +333,6 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
         for (const item of rawDownloads) {
             let finalUrl = await resolveFinalLink(item.link);
 
-            // Ensure PixelDrain links are always converted to Direct API format
             if (finalUrl.includes('pixeldrain.com/u/')) {
                 finalUrl = finalUrl.replace('pixeldrain.com/u/', 'pixeldrain.com/api/file/');
             }
@@ -315,34 +354,38 @@ app.get('/api/v1/chithrapata/infodl', async (req, res) => {
             });
         }
 
-        console.log(`🎉 Successfully cleaned metadata and processed ${downloads.length} download links!`);
+        console.log(`🎉 Successfully extracted Year (${year}), Genres (${genres.join(', ')}), Duration (${duration}) and ${downloads.length} links!`);
         console.log(`==============================================\n`);
 
+        const responseData = {
+            status: true,
+            creator: "@Imalsha",
+            site: "chithrapata",
+            url: movieUrl,
+            data: {
+                title,
+                image: image.trim(),
+                quality,
+                rating: rating,
+                imdb: rating !== 'N/A' ? `${rating} (IMDb)` : 'N/A',
+                director: director,
+                country: country,
+                language: "ENGLISH",
+                genres: genres,
+                story: story || 'No description available',
+                cast,
+                gallery,
+                trailer: "https://www.youtube.com/@chithrapata",
+                year: year,       // දැන් හරියටම මූවි එකේ අවුරුද්ද වැටේවි! (උදා: 2003)
+                duration: duration, // දැන් හරියටම මූවි එකේ කාලය වැටේවි! (උදා: 160 min)
+                downloads: downloads.length > 0 ? downloads : [{ quality: "HD [Telegram]", size: "N/A", language: "English", link: "https://t.me/ChithrapataAdmin" }]
+            }
+        };
+
+        appCache.set(cacheKey, responseData);
+
         if (!res.headersSent) {
-            res.json({
-                status: true,
-                creator: "@Imalsha",
-                site: "chithrapata",
-                url: movieUrl,
-                data: {
-                    title,
-                    image: image.trim(),
-                    quality,
-                    rating: rating,
-                    imdb: rating !== 'N/A' ? `${rating} (IMDb)` : 'N/A',
-                    director: director,
-                    country: country,
-                    language: "ENGLISH",
-                    genres: genres.length > 0 ? genres : ["Crime", "Drama", "Thriller", "Sinhala Subtitles"],
-                    story: story || 'No description available',
-                    cast,
-                    gallery,
-                    trailer: "https://www.youtube.com/@chithrapata",
-                    year: "2026",
-                    duration: "145 min",
-                    downloads: downloads.length > 0 ? downloads : [{ quality: "HD [Telegram]", size: "N/A", language: "English", link: "https://t.me/ChithrapataAdmin" }]
-                }
-            });
+            res.json(responseData);
         }
 
     } catch (err) {
